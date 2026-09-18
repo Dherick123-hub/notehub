@@ -24,6 +24,10 @@ export default function Home() {
   const [subject, setSubject] = useState('');
   const [file, setFile] = useState<File | null>(null);
 
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('ALL');
+
   useEffect(() => {
     fetchNotes();
   }, []);
@@ -70,7 +74,7 @@ export default function Home() {
 
     const { error: dbError } = await supabase.from('notes').insert({
       title,
-      subject,
+      subject: subject.toUpperCase().trim(),
       file_url: publicUrl,
       file_type: fileExt,
       uploader_id: user.id,
@@ -87,6 +91,17 @@ export default function Home() {
 
     setIsUploading(false);
   };
+
+  // Get dynamic unique subjects list for filter dropdown
+  const uniqueSubjects = Array.from(new Set(notes.map((n) => n.subject.toUpperCase())));
+
+  // Client-side filtering logic
+  const filteredNotes = notes.filter((note) => {
+    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          note.subject.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSubject = selectedSubject === 'ALL' || note.subject.toUpperCase() === selectedSubject;
+    return matchesSearch && matchesSubject;
+  });
 
   return (
     <main className="max-w-4xl mx-auto p-6 text-gray-900">
@@ -128,24 +143,55 @@ export default function Home() {
         </form>
       </div>
 
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <input
+          type="text"
+          placeholder="Search by title or subject..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 p-2.5 border border-gray-300 rounded-md text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select
+          value={selectedSubject}
+          onChange={(e) => setSelectedSubject(e.target.value)}
+          className="p-2.5 border border-gray-300 rounded-md text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="ALL">All Subjects</option>
+          {uniqueSubjects.map((subj) => (
+            <option key={subj} value={subj}>
+              {subj}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Feed List */}
       <div className="space-y-4">
-        {notes.map((note) => (
-          <div key={note.id} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm flex justify-between items-center">
-            <div>
-              <h3 className="font-bold text-lg text-gray-900">{note.title}</h3>
-              <p className="text-sm text-gray-600">{note.subject} • Uploaded by {note.profiles?.full_name || 'Anonymous'}</p>
+        {filteredNotes.length > 0 ? (
+          filteredNotes.map((note) => (
+            <div key={note.id} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-lg text-gray-900">{note.title}</h3>
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold text-blue-600">{note.subject}</span> • Uploaded by {note.profiles?.full_name || 'Anonymous'}
+                </p>
+              </div>
+              <a
+                href={note.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-blue-50 text-blue-600 px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-100 transition"
+              >
+                View Document
+              </a>
             </div>
-            <a
-              href={note.file_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-blue-50 text-blue-600 px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-100 transition"
-            >
-              View Document
-            </a>
+          ))
+        ) : (
+          <div className="text-center py-8 bg-white border border-gray-200 rounded-lg text-gray-500">
+            No notes found matching your filter criteria.
           </div>
-        ))}
+        )}
       </div>
     </main>
   );
