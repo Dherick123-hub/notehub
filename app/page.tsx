@@ -15,6 +15,8 @@ interface Note {
   file_url: string;
   created_at: string;
   profiles: { full_name: string };
+  upvotes_count?: number;
+  user_has_upvoted?: boolean;
 }
 
 export default function Home() {
@@ -23,22 +25,67 @@ export default function Home() {
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('ALL');
 
   useEffect(() => {
-    fetchNotes();
+    fetchNotesAndUpvotes();
   }, []);
 
-  const fetchNotes = async () => {
-    const { data, error } = await supabase
+  const fetchNotesAndUpvotes = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) setCurrentUserId(user.id);
+
+    // Fetch notes with uploader details
+    const { data: notesData, error: notesError } = await supabase
       .from('notes')
       .select('*, profiles(full_name)')
       .order('created_at', { ascending: false });
 
-    if (!error && data) setNotes(data as unknown as Note[]);
+    // Fetch all upvotes
+    const { data: upvotesData } = await supabase
+      .from('upvotes')
+      .select('note_id, user_id');
+
+    if (!notesError && notesData) {
+      const processedNotes = notesData.map((note) => {
+        const noteUpvotes = upvotesData?.filter((u) => u.note_id === note.id) || [];
+        const userHasUpvoted = user ? noteUpvotes.some((u) => u.user_id === user.id) : false;
+
+        return {
+          ...note,
+          upvotes_count: noteUpvotes.length,
+          user_has_upvoted: userHasUpvoted,
+        };
+      });
+
+      setNotes(processedNotes as unknown as Note[]);
+    }
+  };
+
+  const handleToggleUpvote = async (noteId: string, currentlyUpvoted: boolean) => {
+    if (!currentUserId) {
+      alert('Please log in to upvote notes.');
+      return;
+    }
+
+    if (currentlyUpvoted) {
+      await supabase
+        .from('upvotes')
+        .delete()
+        .eq('note_id', noteId)
+        .eq('user_id', currentUserId);
+    } else {
+      await supabase.from('upvotes').insert({
+        note_id: noteId,
+        user_id: currentUserId,
+      });
+    }
+
+    fetchNotesAndUpvotes();
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -86,16 +133,14 @@ export default function Home() {
       setTitle('');
       setSubject('');
       setFile(null);
-      fetchNotes();
+      fetchNotesAndUpvotes();
     }
 
     setIsUploading(false);
   };
 
-  // Get dynamic unique subjects list for filter dropdown
   const uniqueSubjects = Array.from(new Set(notes.map((n) => n.subject.toUpperCase())));
 
-  // Client-side filtering logic
   const filteredNotes = notes.filter((note) => {
     const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           note.subject.toLowerCase().includes(searchQuery.toLowerCase());
@@ -143,7 +188,7 @@ export default function Home() {
         </form>
       </div>
 
-      {/* Search & Filter Bar */}
+      {/* Search & Filter Controls */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <input
           type="text"
@@ -170,13 +215,29 @@ export default function Home() {
       <div className="space-y-4">
         {filteredNotes.length > 0 ? (
           filteredNotes.map((note) => (
-            <div key={note.id} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-lg text-gray-900">{note.title}</h3>
-                <p className="text-sm text-gray-600">
-                  <span className="font-semibold text-blue-600">{note.subject}</span> • Uploaded by {note.profiles?.full_name || 'Anonymous'}
-                </p>
+            <div key={note.id} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {/* Upvote Button */}
+                <button
+                  onClick={() => handleToggleUpvote(note.id, !!note.user_has_upvoted)}
+                  className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg border transition ${
+                    note.user_has_upvoted
+                      ? 'bg-blue-50 border-blue-500 text-blue-600 font-bold'
+                      : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="text-xs">▲</span>
+                  <span className="text-xs">{note.upvotes_count || 0}</span>
+                </button>
+
+                <div>
+                  <h3 className="font-bold text-lg text-gray-900">{note.title}</h3>
+                  <p className="text-sm text-gray-600">
+                    <span className="font-semibold text-blue-600">{note.subject}</span> • Uploaded by {note.profiles?.full_name || 'Anonymous'}
+                  </p>
+                </div>
               </div>
+
               <a
                 href={note.file_url}
                 target="_blank"
