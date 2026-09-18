@@ -50,6 +50,14 @@ export default function Navbar() {
               {profile?.full_name || user.email}
             </span>
 
+            {/* Profile Link */}
+            <Link
+              href="/profile"
+              className="text-sm bg-gray-100 text-gray-700 font-medium px-3 py-1.5 rounded-md hover:bg-gray-200 transition"
+            >
+              Profile
+            </Link>
+
             {profile?.role === 'admin' && (
               <Link
                 href="/admin"
