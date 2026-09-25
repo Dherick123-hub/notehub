@@ -1,189 +1,158 @@
-'use client'
+'use client';
 
-import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Check, X, ShieldAlert, UserCheck, Loader2 } from 'lucide-react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface Profile {
-  id: string
-  full_name: string
-  course: string
-  year_level: number
-  status: string
-  id_photo_url: string | null
-  created_at: string
+  id: string;
+  full_name: string;
+  course: string;
+  year_level: number;
+  status: string;
+  student_id_url?: string;
+  created_at?: string;
 }
 
-export default function AdminPage() {
-  const router = useRouter()
-  const [pendingUsers, setPendingUsers] = useState<Profile[]>([])
-  const [loading, setLoading] = useState(true)
-  const [errorMsg, setErrorMsg] = useState('')
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
+export default function AdminApprovalPage() {
+  const [pendingUsers, setPendingUsers] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const fetchPendingUsers = useCallback(async () => {
-    setLoading(true)
+  // Fetch all pending users
+  const fetchPendingUsers = async () => {
+    setLoading(true);
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
+      .ilike('status', 'Pending');
 
-    if (error) {
-      setErrorMsg(error.message)
-    } else {
-      setPendingUsers(data || [])
+    if (!error && data) {
+      setPendingUsers(data);
     }
-    setLoading(false)
-  }, [])
-
-  const checkAdminAndFetch = useCallback(async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError || !profile || profile.role !== 'admin') {
-        setErrorMsg('Access denied. Admin privileges required.')
-        setLoading(false)
-        return
-      }
-
-      await fetchPendingUsers()
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Something went wrong.'
-      setErrorMsg(message)
-      setLoading(false)
-    }
-  }, [fetchPendingUsers, router])
+    setLoading(false);
+  };
 
   useEffect(() => {
-    let isMounted = true
+    fetchPendingUsers();
+  }, []);
 
-    const runCheck = async () => {
-      if (!isMounted) return
-      await checkAdminAndFetch()
+  // Update account status (Approve or Reject)
+  const handleUpdateStatus = async (userId: string, newStatus: 'Approved' | 'Rejected') => {
+    setActionLoading(userId);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ status: newStatus })
+      .eq('id', userId);
+
+    if (!error) {
+      setPendingUsers((prev) => prev.filter((user) => user.id !== userId));
+    } else {
+      alert('Failed to update status: ' + error.message);
     }
-
-    void runCheck()
-
-    return () => {
-      isMounted = false
-    }
-  }, [checkAdminAndFetch])
-
-  const handleUpdateStatus = async (userId: string, newStatus: 'approved' | 'rejected') => {
-    setActionLoading(userId)
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          status: newStatus,
-          verified_at: new Date().toISOString(),
-          approved_by: user?.id,
-          id_photo_url: null,
-        })
-        .eq('id', userId)
-
-      if (updateError) throw updateError
-
-      setPendingUsers((prev) => prev.filter((p) => p.id !== userId))
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unable to update user status.'
-      alert(`Error updating status: ${message}`)
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const getImageUrl = (path: string | null) => {
-    if (!path) return null
-    const { data } = supabase.storage.from('id-photos').getPublicUrl(path)
-    return data.publicUrl
-  }
-
-  if (loading) {
-    return <div className="p-8 text-center text-black">Loading admin panel...</div>
-  }
-
-  if (errorMsg) {
-    return <div className="p-8 text-center text-red-600 font-medium">{errorMsg}</div>
-  }
+    setActionLoading(null);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900">Admin Approval Panel</h1>
-        <p className="text-gray-500 mt-1">Review pending student account registrations</p>
+    <div className="min-h-screen bg-slate-50 p-8">
+      <div className="max-w-5xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+              <UserCheck className="w-7 h-7 text-blue-600" />
+              Admin Account Approvals
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Verify student ID submissions and approve pending accounts.
+            </p>
+          </div>
+          <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1 rounded-full">
+            {pendingUsers.length} Pending
+          </span>
+        </div>
 
-        {pendingUsers.length === 0 ? (
-          <div className="mt-8 p-6 bg-white rounded-xl shadow-sm border border-gray-100 text-center text-gray-500">
-            No pending account registrations at this time.
+        {/* Content Section */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Loading pending accounts...</span>
+          </div>
+        ) : pendingUsers.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500">
+            <Check className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+            <h3 className="font-semibold text-slate-800">All caught up!</h3>
+            <p className="text-xs text-slate-500 mt-1">There are no pending account verification requests.</p>
           </div>
         ) : (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid gap-4">
             {pendingUsers.map((user) => (
-              <div key={user.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">{user.full_name}</h3>
-                    <p className="text-sm text-gray-500">{user.course} — Year {user.year_level}</p>
-                  </div>
-                  <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                    Pending
+              <div
+                key={user.id}
+                className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6"
+              >
+                {/* User Info */}
+                <div className="space-y-1 w-full md:w-1/3">
+                  <h3 className="font-bold text-slate-900 text-base">{user.full_name || 'Unnamed Student'}</h3>
+                  <p className="text-xs text-slate-500">{user.course || 'N/A'} • Year {user.year_level || 'N/A'}</p>
+                  <span className="inline-block bg-amber-50 text-amber-700 text-[10px] font-bold px-2.5 py-0.5 rounded-md border border-amber-200">
+                    STATUS: {user.status}
                   </span>
                 </div>
 
-                {user.id_photo_url && (
-                  <div className="mt-4">
-                    <p className="text-xs font-medium text-gray-500 mb-2">Submitted ID Photo:</p>
-                    <a
-                      href={getImageUrl(user.id_photo_url) || '#'}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-blue-600 underline"
-                    >
-                      View full resolution image
-                    </a>
+                {/* ID Photo Verification Preview */}
+                {user.student_id_url ? (
+                  <a
+                    href={user.student_id_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group relative block rounded-xl overflow-hidden border border-slate-200 h-24 w-40 bg-slate-100"
+                  >
+                    <img
+                      src={user.student_id_url}
+                      alt="Student ID"
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                    <span className="absolute inset-0 bg-black/40 text-white text-[10px] font-medium flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      View Full ID
+                    </span>
+                  </a>
+                ) : (
+                  <div className="h-24 w-40 bg-slate-100 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-xs text-slate-400">
+                    No ID Uploaded
                   </div>
                 )}
 
-                <div className="mt-6 flex gap-3">
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3 w-full md:w-auto">
                   <button
-                    onClick={() => handleUpdateStatus(user.id, 'approved')}
+                    onClick={() => handleUpdateStatus(user.id, 'Rejected')}
                     disabled={actionLoading === user.id}
-                    className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
+                    className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold flex items-center justify-center gap-1.5 transition disabled:opacity-50"
                   >
-                    Approve
+                    <X className="w-4 h-4" /> Reject
                   </button>
                   <button
-                    onClick={() => handleUpdateStatus(user.id, 'rejected')}
+                    onClick={() => handleUpdateStatus(user.id, 'Approved')}
                     disabled={actionLoading === user.id}
-                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
+                    className="flex-1 md:flex-initial px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition disabled:opacity-50"
                   >
-                    Reject
+                    <Check className="w-4 h-4" /> Approve Account
                   </button>
                 </div>
+
               </div>
             ))}
           </div>
         )}
+
       </div>
     </div>
-  )
+  );
 }

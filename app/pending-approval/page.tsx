@@ -55,20 +55,10 @@ export default function RegisterPage() {
     }
 
     try {
-      // Parse yearLevel string (e.g., "3rd") to integer (3) for DB integer column
-      const yearLevelInt = parseInt(yearLevel.replace(/\D/g, '')) || 3;
-
-      // 1. Sign up user via Supabase Auth with metadata for the DB trigger
+      // 1. Sign up user via Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName,
-            course: course,
-            year_level: yearLevelInt,
-          },
-        },
       });
 
       if (authError) throw authError;
@@ -91,36 +81,24 @@ export default function RegisterPage() {
         .from('student-ids')
         .getPublicUrl(filePath);
 
-      // 3. Upsert Profile record (prevents conflict with handle_new_user trigger)
-      const { error: profileError } = await supabase.from('profiles').upsert(
+      // 3. Create Profile record in database
+      const { error: profileError } = await supabase.from('profiles').insert([
         {
           id: user.id,
           full_name: fullName,
           course: course,
-          year_level: yearLevelInt,
-          status: 'Pending',
-          student_id_url: publicUrlData.publicUrl,
+          year_level: yearLevel,
+          status: 'Pending', // Status pending admin approval
           avatar_url: publicUrlData.publicUrl,
         },
-        { onConflict: 'id' }
-      );
+      ]);
 
       if (profileError) throw profileError;
 
       // Redirect to the pending approval status page
       router.push('/pending-approval');
     } catch (err: any) {
-      // Print detailed logs to Developer Console (F12)
-      console.error('Detailed Registration Error:', err);
-
-      // Expose the precise error message, code, and details directly to UI
-      const detailedError =
-        err.details ||
-        err.hint ||
-        err.message ||
-        (typeof err === 'object' ? JSON.stringify(err) : String(err));
-
-      setErrorMessage(detailedError);
+      setErrorMessage(err.message || 'An error occurred during registration.');
     } finally {
       setLoading(false);
     }
@@ -152,7 +130,7 @@ export default function RegisterPage() {
         </div>
 
         {errorMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm border border-red-100 break-words">
+          <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm border border-red-100">
             {errorMessage}
           </div>
         )}
@@ -297,7 +275,7 @@ export default function RegisterPage() {
             )}
           </button>
         </form>
-      </div>
+      </div>        
     </div>
   );
 }

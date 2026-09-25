@@ -48,7 +48,6 @@ export default function UploadPage() {
     });
   }, [router]);
 
-  // Check for duplicate title within the same subject
   const checkDuplicate = async (inputTitle: string, inputSubject: string) => {
     if (!inputTitle.trim()) {
       setIsDuplicate(false);
@@ -86,28 +85,27 @@ export default function UploadPage() {
     setIsUploading(true);
     setErrorMessage('');
 
-    // Bucket name must match exact lowercase name in Supabase Storage
-    const bucketName = 'notes'; // Change to 'notes-files' if using that bucket
+    const bucketName = 'notes'; 
     const fileExt = file.name.split('.').pop();
     const filePath = `${Date.now()}_${file.name}`;
 
-    // 1. Upload File to Supabase Bucket
+    // Upload to Storage
     const { error: uploadError } = await supabase.storage
       .from(bucketName)
       .upload(filePath, file);
 
     if (uploadError) {
-      setErrorMessage(uploadError.message);
+      setErrorMessage(`Storage Error: ${uploadError.message}`);
       setIsUploading(false);
       return;
     }
 
-    // 2. Get Public Storage URL
+    // Get Public URL
     const { data: { publicUrl } } = supabase.storage
       .from(bucketName)
       .getPublicUrl(filePath);
 
-    // 3. Save Record in Database
+    // Save record with uploader_id
     const { error: dbError } = await supabase.from('notes').insert({
       title: title.trim(),
       subject: subject.trim(),
@@ -117,10 +115,10 @@ export default function UploadPage() {
     });
 
     if (dbError) {
-      setErrorMessage(dbError.message);
+      setErrorMessage(`Database Error: ${dbError.message}`);
       setIsUploading(false);
     } else {
-      router.push('/');
+      router.push('/profile');
     }
   };
 
@@ -134,25 +132,17 @@ export default function UploadPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center pb-24">
       <div className="w-full max-w-md px-4 pt-8 space-y-6">
-        
-        {/* Page Title */}
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-          Upload Note
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Upload Note</h1>
 
         {errorMessage && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl">
+          <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl font-medium">
             {errorMessage}
           </div>
         )}
 
         <form onSubmit={handleFormSubmit} className="space-y-5">
-          
-          {/* File Drag & Drop Box */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-600">
-              File Attachment
-            </label>
+            <label className="block text-xs font-semibold text-slate-600">File Attachment</label>
             <label className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition bg-white group shadow-sm">
               <input
                 type="file"
@@ -173,11 +163,8 @@ export default function UploadPage() {
             </label>
           </div>
 
-          {/* Note Title Input */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-600">
-              Note Title
-            </label>
+            <label className="block text-xs font-semibold text-slate-600">Note Title</label>
             <div className="relative">
               <FileCode className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
@@ -191,11 +178,8 @@ export default function UploadPage() {
             </div>
           </div>
 
-          {/* Subject Tag Dropdown */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-600">
-              Subject Tag
-            </label>
+            <label className="block text-xs font-semibold text-slate-600">Subject Tag</label>
             <div className="relative">
               <Bookmark className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <select
@@ -204,23 +188,18 @@ export default function UploadPage() {
                 className="w-full text-sm pl-10 pr-4 py-3 border border-slate-200/80 rounded-2xl text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm appearance-none cursor-pointer"
               >
                 {subjectsList.map((sub) => (
-                  <option key={sub} value={sub}>
-                    {sub}
-                  </option>
+                  <option key={sub} value={sub}>{sub}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Duplicate Warning Card */}
           {isDuplicate && (
             <div className="bg-amber-100/70 border border-amber-200/80 rounded-2xl p-4 text-amber-900 space-y-3">
               <div className="flex items-start gap-2.5">
                 <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-amber-900">
-                    Possible Duplicate Found
-                  </h4>
+                  <h4 className="text-xs font-bold text-amber-900">Possible Duplicate Found</h4>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
                     Another file has the same name in {subject}. Are you sure you want to upload this?
                   </p>
@@ -246,7 +225,6 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={isUploading || isDuplicate}
@@ -255,29 +233,18 @@ export default function UploadPage() {
             {isUploading ? 'Uploading Note...' : 'Upload Note'}
           </button>
         </form>
-
       </div>
 
-      {/* Bottom Floating Navigation Bar */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 py-2.5 px-6 flex justify-around items-center max-w-md mx-auto z-50">
-        <Link
-          href="/"
-          className="flex flex-col items-center gap-0.5 text-slate-400 font-medium text-[11px] hover:text-slate-600 transition"
-        >
+        <Link href="/" className="flex flex-col items-center gap-0.5 text-slate-400 font-medium text-[11px] hover:text-slate-600 transition">
           <FileText className="w-5 h-5" />
           <span>Browse</span>
         </Link>
-        <Link
-          href="/upload"
-          className="flex flex-col items-center gap-0.5 text-blue-600 font-bold text-[11px]"
-        >
+        <Link href="/upload" className="flex flex-col items-center gap-0.5 text-blue-600 font-bold text-[11px]">
           <UploadIcon className="w-5 h-5" />
           <span>Upload</span>
         </Link>
-        <Link
-          href="/profile"
-          className="flex flex-col items-center gap-0.5 text-slate-400 font-medium text-[11px] hover:text-slate-600 transition"
-        >
+        <Link href="/profile" className="flex flex-col items-center gap-0.5 text-slate-400 font-medium text-[11px] hover:text-slate-600 transition">
           <User className="w-5 h-5" />
           <span>Profile</span>
         </Link>
