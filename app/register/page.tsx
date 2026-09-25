@@ -1,197 +1,209 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { ShieldCheck, UserCheck, CheckCircle2, XCircle, AlertTriangle, Trash2, Check } from 'lucide-react';
 
-export default function RegisterPage() {
-  const [fullName, setFullName] = useState('')
-  const [course, setCourse] = useState('BSCpE')
-  const [yearLevel, setYearLevel] = useState('1')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [idPhoto, setIdPhoto] = useState<File | null>(null)
-  
-  const [errorMsg, setErrorMsg] = useState('')
-  const [successMsg, setSuccessMsg] = useState('')
-  const [loading, setLoading] = useState(false)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setErrorMsg('')
-    const file = e.target.files?.[0]
-    if (!file) return
+interface PendingUser {
+  id: string;
+  full_name: string;
+  course: string;
+  year_level: string;
+  id_photo_url: string;
+}
 
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg']
-    if (!validTypes.includes(file.type)) {
-      setErrorMsg('Please upload an image in JPG or PNG format only.')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setErrorMsg('File size exceeds 5MB limit. Please upload a smaller image.')
-      return
-    }
+interface ReportedNote {
+  id: string;
+  note_id: string;
+  reason: string;
+  notes: {
+    title: string;
+    uploader_id: string;
+  };
+}
 
-    setIdPhoto(file)
-  }
+export default function AdminPanelPage() {
+  const [activeTab, setActiveTab] = useState<'pending' | 'reported'>('pending');
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [reportedNotes, setReportedNotes] = useState<ReportedNote[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrorMsg('')
-    setSuccessMsg('')
+  useEffect(() => {
+    fetchData();
+  }, [activeTab]);
 
-    if (!idPhoto) {
-      setErrorMsg('Please attach your Student ID photo for account verification.')
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            course,
-            year_level: parseInt(yearLevel),
-          },
-        },
-      })
-
-      if (authError) throw authError
-      if (!authData.user) throw new Error('Failed to register user account.')
-
-      const fileExt = idPhoto.name.split('.').pop()
-      const filePath = `${authData.user.id}/student-id.${fileExt}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('id-photos')
-        .upload(filePath, idPhoto, { upsert: true })
-
-      if (uploadError) throw uploadError
-
-      const { error: profileError } = await supabase
+  const fetchData = async () => {
+    setIsLoading(true);
+    if (activeTab === 'pending') {
+      const { data } = await supabase
         .from('profiles')
-        .update({ id_photo_url: filePath })
-        .eq('id', authData.user.id)
-
-      if (profileError) throw profileError
-
-      setSuccessMsg(
-        'Registration submitted! Your account is currently pending manual admin approval before you can log in.'
-      )
-    } catch (err: any) {
-      setErrorMsg(err.message || 'An unexpected error occurred during registration.')
-    } finally {
-      setLoading(false)
+        .select('*')
+        .eq('status', 'pending');
+      setPendingUsers(data || []);
+    } else {
+      const { data } = await supabase
+        .from('reports')
+        .select('*, notes(title, uploader_id)');
+      setReportedNotes(data || []);
     }
-  }
+    setIsLoading(false);
+  };
+
+  const handleUserApproval = async (userId: string, approve: boolean) => {
+    await supabase
+      .from('profiles')
+      .update({ status: approve ? 'approved' : 'rejected' })
+      .eq('id', userId);
+    setPendingUsers((prev) => prev.filter((u) => u.id !== userId));
+  };
+
+  const handleReportAction = async (reportId: string, noteId: string, removeNote: boolean) => {
+    if (removeNote) {
+      await supabase.from('notes').delete().eq('id', noteId);
+    }
+    await supabase.from('reports').delete().eq('id', reportId);
+    setReportedNotes((prev) => prev.filter((r) => r.id !== reportId));
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-md p-8 border border-gray-100">
-        <h2 className="text-2xl font-bold text-gray-900 text-center">Create NoteHub Account</h2>
-        <p className="text-sm text-gray-500 text-center mt-1">
-          Peer-to-peer note sharing for CpE students
-        </p>
-
-        {errorMsg && (
-          <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
-            {errorMsg}
-          </div>
-        )}
-
-        {successMsg && (
-          <div className="mt-4 p-3 bg-green-50 text-green-700 text-sm rounded-lg border border-green-200">
-            {successMsg}
-          </div>
-        )}
-
-        <form onSubmit={handleRegister} className="mt-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Full Name</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Juan Dela Cruz"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="mt-1 w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 text-black"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Course</label>
-              <input
-                type="text"
-                required
-                value={course}
-                onChange={(e) => setCourse(e.target.value)}
-                className="mt-1 w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 text-black"
-              />
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex justify-center">
+      <div className="w-full max-w-md space-y-5">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-emerald-600 text-white p-2 rounded-xl">
+              <ShieldCheck className="w-5 h-5" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Year Level</label>
-              <select
-                value={yearLevel}
-                onChange={(e) => setYearLevel(e.target.value)}
-                className="mt-1 w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-blue-500 focus:border-blue-500 text-black"
-              >
-                <option value="1">1st Year</option>
-                <option value="2">2nd Year</option>
-                <option value="3">3rd Year</option>
-                <option value="4">4th Year</option>
-                <option value="5">5th Year</option>
-              </select>
-            </div>
+            <h1 className="text-xl font-bold text-slate-900">Admin Portal</h1>
           </div>
+          <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full">
+            Verified Admin
+          </span>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Email Address</label>
-            <input
-              type="email"
-              required
-              placeholder="student@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 text-black"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              required
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 text-black"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Student ID Photo</label>
-            <p className="text-xs text-gray-500 mb-1">Upload JPG/PNG photo only (Max 5MB)</p>
-            <input
-              type="file"
-              accept="image/jpeg, image/png, image/jpg"
-              required
-              onChange={handleFileChange}
-              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-          </div>
-
+        {/* Tab Switcher */}
+        <div className="bg-slate-200/70 p-1 rounded-2xl flex gap-1">
           <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition duration-200 disabled:opacity-50"
+            onClick={() => setActiveTab('pending')}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${
+              activeTab === 'pending'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            {loading ? 'Submitting...' : 'Register Account'}
+            Pending Accounts
           </button>
-        </form>
+          <button
+            onClick={() => setActiveTab('reported')}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${
+              activeTab === 'reported'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Reported Notes ({reportedNotes.length})
+          </button>
+        </div>
+
+        {/* Pending Queue List */}
+        {activeTab === 'pending' && (
+          <div className="space-y-3">
+            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Verification Queue ({pendingUsers.length})
+            </h2>
+
+            {pendingUsers.length > 0 ? (
+              pendingUsers.map((user) => (
+                <div key={user.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+                      {user.id_photo_url ? (
+                        <img src={user.id_photo_url} alt="ID" className="w-full h-full object-cover rounded-xl" />
+                      ) : (
+                        <UserCheck className="w-6 h-6 text-blue-600" />
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{user.full_name}</h3>
+                      <p className="text-xs text-slate-500">{user.course} • Year {user.year_level}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => handleUserApproval(user.id, false)}
+                      className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 hover:bg-red-100 transition"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => handleUserApproval(user.id, true)}
+                      className="flex-1 py-2 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-100 hover:bg-emerald-100 transition"
+                    >
+                      Approve
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white rounded-2xl p-8 border text-center space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                <p className="text-xs font-bold text-slate-700">All caught up — nothing to review right now</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reported Notes List */}
+        {activeTab === 'reported' && (
+          <div className="space-y-3">
+            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Reports Queue ({reportedNotes.length})
+            </h2>
+
+            {reportedNotes.length > 0 ? (
+              reportedNotes.map((report) => (
+                <div key={report.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{report.notes?.title || 'Note item'}</h3>
+                      <p className="text-xs text-red-500 font-semibold mt-0.5">Reason: {report.reason}</p>
+                    </div>
+                    <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => handleReportAction(report.id, report.note_id, false)}
+                      className="flex-1 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition"
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      onClick={() => handleReportAction(report.id, report.note_id, true)}
+                      className="flex-1 py-2 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 transition"
+                    >
+                      Remove Note
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white rounded-2xl p-8 border text-center space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                <p className="text-xs font-bold text-slate-700">All caught up — nothing to review right now</p>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
-  )
+  );
 }

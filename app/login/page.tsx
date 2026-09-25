@@ -1,121 +1,154 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { BookOpen, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [errorMsg, setErrorMsg] = useState('')
-  const [loading, setLoading] = useState(false)
+  const router = useRouter();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrorMsg('')
-    setLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
+    setErrorMessage('');
 
-    try {
-      // 1. Authenticate with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (authError) throw authError
-
-      // 2. Fetch profile status
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('status, role')
-        .eq('id', authData.user.id)
-        .single()
-
-      if (profileError) throw profileError
-
-      // 3. Check account approval status
-      if (profile.status === 'pending') {
-        await supabase.auth.signOut()
-        setErrorMsg('Your account is still pending admin approval. Please check back later.')
-        return
-      }
-
-      if (profile.status === 'rejected' || profile.status === 'suspended') {
-        await supabase.auth.signOut()
-        setErrorMsg(`Your account has been ${profile.status}. Please contact an admin.`)
-        return
-      }
-
-      // Redirect based on role
-      if (profile.role === 'admin') {
-        router.push('/admin')
-      } else {
-        router.push('/')
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Invalid login credentials.')
-    } finally {
-      setLoading(false)
+    if (error) {
+      setErrorMessage(error.message);
+      setIsLoading(false);
+    } else {
+      router.push('/profile');
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-md p-8 border border-gray-100">
-        <h2 className="text-2xl font-bold text-gray-900 text-center">Sign In to NoteHub</h2>
-        <p className="text-sm text-gray-500 text-center mt-1">
-          Peer-to-peer note sharing for CpE students
-        </p>
-
-        {errorMsg && (
-          <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
-            {errorMsg}
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-between p-6">
+      <div className="w-full max-w-sm flex-1 flex flex-col justify-center space-y-8 pt-12">
+        
+        {/* Logo & Tagline Header */}
+        <div className="flex flex-col items-center space-y-2">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-blue-600 text-white p-2.5 rounded-2xl shadow-md shadow-blue-500/20">
+              <BookOpen className="w-7 h-7" />
+            </div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              NoteHub
+            </h1>
           </div>
-        )}
+          <p className="text-sm font-medium text-slate-500 tracking-wide">
+            Share notes. Ace exams.
+          </p>
+        </div>
 
-        <form onSubmit={handleLogin} className="mt-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Email Address</label>
-            <input
-              type="email"
-              required
-              placeholder="student@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 text-black"
-            />
-          </div>
+        {/* Form Container */}
+        <div className="space-y-6">
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Student Login
+          </h2>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              required
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 text-black"
-            />
-          </div>
+          {errorMessage && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl p-3">
+              {errorMessage}
+            </div>
+          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition duration-200 disabled:opacity-50"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Email Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                Student Email / Username
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. student@univ.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition shadow-sm"
+                />
+              </div>
+            </div>
 
-        <p className="text-center text-sm text-gray-600 mt-6">
-          Don't have an account?{' '}
-          <Link href="/register" className="text-blue-600 hover:underline font-medium">
-            Register here
-          </Link>
-        </p>
+            {/* Password Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-2xl pl-10 pr-10 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition shadow-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Forgot Password Link */}
+            <div className="flex justify-end pt-1">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            {/* Log In Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition shadow-md shadow-blue-500/25 disabled:opacity-50 text-sm mt-2"
+            >
+              {isLoading ? 'Logging in...' : 'Log In'}
+            </button>
+          </form>
+
+          {/* Register Redirect Link */}
+          <p className="text-center text-xs font-medium text-slate-500 pt-2">
+            Don&apos;t have an account?{' '}
+            <Link href="/register" className="font-bold text-blue-600 hover:underline">
+              Register
+            </Link>
+          </p>
+        </div>
       </div>
+
+      {/* Bottom Mobile Handle Indicator */}
+      <div className="w-32 h-1 bg-slate-300 rounded-full mb-2 shrink-0" />
     </div>
-  )
+  );
 }

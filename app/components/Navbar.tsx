@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,77 +10,61 @@ const supabase = createClient(
 );
 
 export default function Navbar() {
-  const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<{ full_name: string; role: string } | null>(null);
 
   useEffect(() => {
-    getUser();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const getUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      setUser(user);
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', user.id)
-        .single();
-      if (data) setProfile(data);
-    }
-  };
-
-  const handleSignOut = async () => {
+  const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
   };
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
-      <Link href="/" className="text-xl font-bold text-blue-600">
-        NoteHub
-      </Link>
+    <nav className="bg-gray-900 border-b border-gray-800 p-4">
+      <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <Link className="font-bold text-xl text-white" href="/">
+          NoteHub
+        </Link>
 
-      <div className="flex items-center gap-4">
-        {user ? (
-          <>
-            <span className="text-sm text-gray-700 font-medium">
-              {profile?.full_name || user.email}
-            </span>
-
-            {/* Profile Link */}
-            <Link
-              href="/profile"
-              className="text-sm bg-gray-100 text-gray-700 font-medium px-3 py-1.5 rounded-md hover:bg-gray-200 transition"
-            >
-              Profile
-            </Link>
-
-            {profile?.role === 'admin' && (
+        <div>
+          {user ? (
+            <div className="flex items-center gap-4">
               <Link
-                href="/admin"
-                className="text-xs bg-purple-100 text-purple-700 font-semibold px-2.5 py-1 rounded-md hover:bg-purple-200 transition"
+                href="/profile"
+                className="text-sm font-medium text-gray-300 hover:text-white transition"
               >
-                Admin Panel
+                Profile
               </Link>
-            )}
-
-            <button
-              onClick={handleSignOut}
-              className="text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-md font-medium transition"
-            >
-              Sign Out
-            </button>
-          </>
-        ) : (
-          <Link
-            href="/login"
-            className="text-sm bg-blue-600 text-white px-4 py-2 rounded-md font-medium hover:bg-blue-700 transition"
-          >
-            Sign In
-          </Link>
-        )}
+              <span className="text-sm text-gray-400">{user.email}</span>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-md text-sm transition"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link className="text-gray-300 hover:text-white text-sm" href="/login">
+                Login
+              </Link>
+              <Link className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition" href="/register">
+                Register
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );

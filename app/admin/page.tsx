@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 
@@ -21,39 +21,7 @@ export default function AdminPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  useEffect(() => {
-    checkAdminAndFetch()
-  }, [])
-
-  const checkAdminAndFetch = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
-      // Verify admin role
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError || profile?.role !== 'admin') {
-        setErrorMsg('Access denied. Admin privileges required.')
-        setLoading(false)
-        return
-      }
-
-      fetchPendingUsers()
-    } catch (err: any) {
-      setErrorMsg(err.message)
-      setLoading(false)
-    }
-  }
-
-  const fetchPendingUsers = async () => {
+  const fetchPendingUsers = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('profiles')
@@ -67,29 +35,77 @@ export default function AdminPage() {
       setPendingUsers(data || [])
     }
     setLoading(false)
-  }
+  }, [])
+
+  const checkAdminAndFetch = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push('/login')
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError || !profile || profile.role !== 'admin') {
+        setErrorMsg('Access denied. Admin privileges required.')
+        setLoading(false)
+        return
+      }
+
+      await fetchPendingUsers()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong.'
+      setErrorMsg(message)
+      setLoading(false)
+    }
+  }, [fetchPendingUsers, router])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const runCheck = async () => {
+      if (!isMounted) return
+      await checkAdminAndFetch()
+    }
+
+    void runCheck()
+
+    return () => {
+      isMounted = false
+    }
+  }, [checkAdminAndFetch])
 
   const handleUpdateStatus = async (userId: string, newStatus: 'approved' | 'rejected') => {
     setActionLoading(userId)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-      // Update user profile status
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
           status: newStatus,
           verified_at: new Date().toISOString(),
           approved_by: user?.id,
-          id_photo_url: null // Clear temp ID path after review
+          id_photo_url: null,
         })
         .eq('id', userId)
 
       if (updateError) throw updateError
 
       setPendingUsers((prev) => prev.filter((p) => p.id !== userId))
-    } catch (err: any) {
-      alert(`Error updating status: ${err.message}`)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to update user status.'
+      alert(`Error updating status: ${message}`)
     } finally {
       setActionLoading(null)
     }
