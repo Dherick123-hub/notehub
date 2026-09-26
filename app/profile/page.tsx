@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
-import { Settings, FileText, Upload, User as UserIcon, Loader2, Grid } from 'lucide-react';
+import { Settings, FileText, Upload, User as UserIcon, Loader2, Grid, Camera, Maximize2, X } from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,6 +44,52 @@ export default function ProfilePage() {
   const [selectedNote, setSelectedNote] = useState<NoteItem | null>(null);
   const [hasUpvoted, setHasUpvoted] = useState<boolean>(false);
   const [upvoteLoading, setUpvoteLoading] = useState<boolean>(false);
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      router.push('/login');
+      setUploading(false);
+      return;
+    }
+
+    const fileExt = file.name.split('.').pop() || 'png';
+    const path = `${userId}/avatar.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) {
+      console.error('Avatar upload error:', uploadError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ avatar_url: publicUrl })
+      .eq('id', userId);
+
+    if (!updateError) {
+      setProfile((current) => (current ? { ...current, avatar_url: publicUrl } : current));
+    }
+
+    setUploading(false);
+  };
+
+  const handleOpenNoteModal = (note: NoteItem) => {
+    setSelectedNote(note);
+  };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -299,6 +345,39 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {selectedNote && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-30">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Note Details</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedNote(null)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3 text-sm text-slate-600">
+              <p><span className="font-semibold text-slate-800">Title:</span> {selectedNote.title}</p>
+              <p><span className="font-semibold text-slate-800">Subject:</span> {selectedNote.subject}</p>
+              <p><span className="font-semibold text-slate-800">Uploaded:</span> {new Date(selectedNote.created_at).toLocaleDateString()}</p>
+              <p><span className="font-semibold text-slate-800">Upvotes:</span> {selectedNote.upvotes_count || 0}</p>
+            </div>
+            {selectedNote.file_url && (
+              <a
+                href={selectedNote.file_url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white"
+              >
+                Open file
+              </a>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Bottom Nav Bar - Always points strictly to base routes */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-8 py-3 flex justify-center items-center z-20">

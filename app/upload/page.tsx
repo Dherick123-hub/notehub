@@ -110,7 +110,7 @@ export default function UploadPage() {
     checkDuplicate(val, subject);
   };
 
-  const handleSubjectChange = (e: React.ChangeEvent<SELECTElement>) => {
+  const handleSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setSubject(val);
     checkDuplicate(title, val);
