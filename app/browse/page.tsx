@@ -36,7 +36,7 @@ interface Note {
     full_name: string | null;
     course: string | null;
     year_level: string | null;
-  };
+  } | null;
   upvotes_count?: number;
   user_has_upvoted?: boolean;
 }
@@ -61,12 +61,14 @@ export default function BrowsePage() {
   const [reportReason, setReportReason] = useState<string>('');
   const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
 
+  // Fetch Session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setCurrentUserId(session?.user?.id ?? null);
     });
   }, []);
 
+  // Fetch Notes Function
   const fetchNotes = useCallback(async () => {
     setLoading(true);
 
@@ -136,6 +138,7 @@ export default function BrowsePage() {
     void fetchNotes();
   }, [fetchNotes]);
 
+  // Handle Upvote
   const handleUpvote = async (noteId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
@@ -147,18 +150,9 @@ export default function BrowsePage() {
     const targetNote = notes.find((n) => n.id === noteId);
     if (!targetNote) return;
 
-    if (targetNote.user_has_upvoted) {
-      await supabase
-        .from('upvotes')
-        .delete()
-        .eq('note_id', noteId)
-        .eq('user_id', currentUserId);
-    } else {
-      await supabase
-        .from('upvotes')
-        .insert([{ note_id: noteId, user_id: currentUserId }]);
-    }
+    const isCurrentlyUpvoted = targetNote.user_has_upvoted;
 
+    // Optimistic UI update
     setNotes((prevNotes) =>
       prevNotes.map((n) => {
         if (n.id === noteId) {
@@ -188,6 +182,19 @@ export default function BrowsePage() {
           : null
       );
     }
+
+    // Database operation
+    if (isCurrentlyUpvoted) {
+      await supabase
+        .from('upvotes')
+        .delete()
+        .eq('note_id', noteId)
+        .eq('user_id', currentUserId);
+    } else {
+      await supabase
+        .from('upvotes')
+        .insert([{ note_id: noteId, user_id: currentUserId }]);
+    }
   };
 
   const handleDownload = (fileUrl: string, title: string) => {
@@ -202,32 +209,41 @@ export default function BrowsePage() {
 
   const handleReportSubmit = async () => {
     if (!reportReason.trim() || !selectedNote) return;
+    if (!currentUserId) {
+      alert('Please log in to report a note.');
+      return;
+    }
+
     setIsSubmittingReport(true);
 
     const { error } = await supabase.from('reports').insert([
       {
         note_id: selectedNote.id,
         reporter_id: currentUserId,
-        reason: reportReason,
+        reason: reportReason.trim(),
         status: 'pending',
       },
     ]);
 
     setIsSubmittingReport(false);
+
     if (!error) {
       alert('Report submitted successfully.');
       setReportReason('');
       setShowReport(false);
     } else {
-      alert('Failed to submit report.');
+      console.error('Report submission error:', error.message);
+      alert('Failed to submit report. Please try again.');
     }
   };
 
   const filteredNotes = notes.filter((note) => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase().trim();
+    const uploaderName = note.profiles?.full_name?.toLowerCase() || '';
     return (
       note.title.toLowerCase().includes(query) ||
-      note.subject.toLowerCase().includes(query)
+      note.subject.toLowerCase().includes(query) ||
+      uploaderName.includes(query)
     );
   });
 
@@ -255,15 +271,15 @@ export default function BrowsePage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search notes or subject"
+            placeholder="Search notes, subjects, or uploaders..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-white text-slate-800 text-sm pl-11 pr-4 py-3 rounded-2xl border border-slate-200/80 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition shadow-sm placeholder:text-slate-400"
           />
         </div>
 
-        {/* CATEGORY SELECTOR */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        {/* CATEGORY SELECTOR WITH VISIBLE SCROLLBAR */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
           {SUBJECT_CATEGORIES.map((cat) => {
             const Icon = cat.icon;
             const isActive = selectedCategory === cat.id;
@@ -272,7 +288,7 @@ export default function BrowsePage() {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
                   isActive
                     ? 'bg-[#2563EB] text-white shadow-sm'
                     : 'bg-white text-slate-600 border border-slate-200/70 hover:bg-slate-50'
@@ -328,7 +344,7 @@ export default function BrowsePage() {
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
                     <span className="flex items-center gap-1.5 font-medium">
                       <UserIcon className="w-3.5 h-3.5 text-slate-300" />
-                      {uploaderName} - {courseYear}
+                      {uploaderName} • {courseYear}
                     </span>
 
                     <button
@@ -336,7 +352,7 @@ export default function BrowsePage() {
                       className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
                         note.user_has_upvoted
                           ? 'bg-[#2563EB] text-white'
-                          : 'bg-[#2563EB] text-white hover:bg-blue-700'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       <ArrowUp className="w-3.5 h-3.5" />
