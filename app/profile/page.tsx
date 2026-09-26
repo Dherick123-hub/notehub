@@ -25,7 +25,7 @@ interface NoteItem {
   title: string;
   subject: string;
   created_at: string;
-  upvotes?: number;
+  upvotes_count?: number;
 }
 
 export default function ProfilePage() {
@@ -65,14 +65,29 @@ export default function ProfilePage() {
         // Query using uploader_id to match Upload page inserts
         const { data: notesData, error: notesError } = await supabase
           .from('notes')
-          .select('*')
+          .select('id, title, subject, created_at')
           .eq('uploader_id', userId)
           .order('created_at', { ascending: false });
 
         if (notesError) {
           console.error('Error fetching notes:', notesError.message);
         } else if (notesData) {
-          setUserNotes(notesData);
+          // Fetch upvote counts for each note
+          const notesWithVotes = await Promise.all(
+            notesData.map(async (note) => {
+              const { count } = await supabase
+                .from('upvotes')
+                .select('*', { count: 'exact', head: true })
+                .eq('note_id', note.id);
+
+              return {
+                ...note,
+                upvotes_count: count || 0,
+              };
+            })
+          );
+
+          setUserNotes(notesWithVotes);
         }
       } catch (error) {
         console.error('Error loading profile page:', error);
@@ -172,20 +187,26 @@ export default function ProfilePage() {
           <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
             <span className="text-xs font-bold text-slate-400 block mb-2">Upvotes Received</span>
             <span className="text-3xl font-extrabold text-[#2563EB]">
-              {userNotes.reduce((acc, note) => acc + (note.upvotes || 0), 0)}
+              {userNotes.reduce((acc, note) => acc + (note.upvotes_count || 0), 0)}
             </span>
           </div>
         </div>
 
         <div className="flex items-center justify-between mb-4 px-1">
           <h2 className="text-xl font-extrabold text-[#0F172A] tracking-tight">My Uploads</h2>
-          <button className="text-xs font-bold text-[#2563EB] hover:underline">View All</button>
+          <Link href="/browse" className="text-xs font-bold text-[#2563EB] hover:underline">
+            View All
+          </Link>
         </div>
 
         <div className="space-y-3 mb-4">
           {userNotes.length > 0 ? (
             userNotes.map((note) => (
-              <div key={note.id} className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
+              <Link 
+                key={note.id} 
+                href={`/browse/${note.id}`}
+                className="block bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4 hover:border-blue-300 transition-colors cursor-pointer"
+              >
                 <h4 className="text-lg font-bold text-[#0F172A]">{note.title}</h4>
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center space-x-1.5 text-xs font-bold text-[#0D9488] bg-[#CCFBF1] px-3 py-1 rounded-lg">
@@ -202,10 +223,10 @@ export default function ProfilePage() {
                     <span>My Upload</span>
                   </span>
                   <span className="bg-slate-100 px-3 py-1 rounded-full text-slate-600 font-extrabold">
-                    {note.upvotes || 0}
+                    {note.upvotes_count || 0}
                   </span>
                 </div>
-              </div>
+              </Link>
             ))
           ) : (
             <div className="bg-white rounded-3xl p-6 border border-slate-100 text-center text-slate-400 text-sm font-medium">
@@ -215,6 +236,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* Bottom Nav Bar - Always points strictly to base routes */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-8 py-3 flex justify-center items-center z-20">
         <div className="w-full max-w-xl flex justify-around items-center">
           <Link href="/browse" className="flex flex-col items-center text-slate-400 hover:text-slate-600">

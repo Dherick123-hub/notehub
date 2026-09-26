@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { ArrowLeft, Download, ThumbsUp, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  Download, 
+  ThumbsUp, 
+  AlertCircle, 
+  CheckCircle2, 
+  ChevronDown, 
+  ChevronUp, 
+  FileText,
+  ExternalLink
+} from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,64 +39,82 @@ type NoteDetail = {
 
 export default function NoteDetailPage() {
   const params = useParams<{ id: string }>();
-  const noteId = params.id;
+  const noteId = params?.id;
   const router = useRouter();
 
   const [note, setNote] = useState<NoteDetail | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [upvotes, setUpvotes] = useState(0);
   const [hasUpvoted, setHasUpvoted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('Inappropriate content');
   const [reportSubmitted, setReportSubmitted] = useState(false);
 
   const loadNoteData = useCallback(async () => {
+    if (!noteId) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
     setCurrentUser(user);
 
-    const { data: noteData } = await supabase
+    const { data: noteData, error } = await supabase
       .from('notes')
       .select('*, uploader:profiles(full_name, course, year_level)')
       .eq('id', noteId)
-      .single();
+      .maybeSingle();
 
-    if (noteData) setNote(noteData as NoteDetail);
+    if (error || !noteData) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
 
-    const { data: votes } = await supabase.from('upvotes').select('*').eq('note_id', noteId);
+    setNote(noteData as NoteDetail);
+
+    const { data: votes } = await supabase
+      .from('upvotes')
+      .select('*')
+      .eq('note_id', noteId);
+
     if (votes) {
       setUpvotes(votes.length);
       if (user) {
         setHasUpvoted(votes.some((v: { user_id: string }) => v.user_id === user.id));
       }
     }
+
+    setLoading(false);
   }, [noteId]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const runLoad = async () => {
-      if (!isMounted) return;
-      await loadNoteData();
-    };
-
-    void runLoad();
-
-    return () => {
-      isMounted = false;
-    };
+    void loadNoteData();
   }, [loadNoteData]);
 
   const handleUpvote = async () => {
     if (!currentUser || note?.uploader_id === currentUser.id) return;
 
     if (hasUpvoted) {
-      await supabase.from('upvotes').delete().eq('note_id', noteId).eq('user_id', currentUser.id);
+      await supabase
+        .from('upvotes')
+        .delete()
+        .eq('note_id', noteId)
+        .eq('user_id', currentUser.id);
       setUpvotes((prev) => prev - 1);
       setHasUpvoted(false);
     } else {
-      await supabase.from('upvotes').insert([{ note_id: noteId, user_id: currentUser.id }]);
+      await supabase
+        .from('upvotes')
+        .insert([{ note_id: noteId, user_id: currentUser.id }]);
       setUpvotes((prev) => prev + 1);
       setHasUpvoted(true);
     }
@@ -100,16 +128,40 @@ export default function NoteDetailPage() {
     setIsReportOpen(false);
   };
 
-  if (!note) return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-xs text-slate-400">Loading Note...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-xs text-slate-400">
+        Loading Note...
+      </div>
+    );
+  }
+
+  if (notFound || !note) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 text-center space-y-3">
+        <p className="text-sm font-bold text-slate-700">Note not found or deleted.</p>
+        <button
+          onClick={() => router.push('/browse')}
+          className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl"
+        >
+          Back to Browse
+        </button>
+      </div>
+    );
+  }
 
   const isOwner = currentUser?.id === note.uploader_id;
-  const isDocumentExternal = note.file_url?.match(/\.(docx|pptx)$/i);
+  const fileUrl = note.file_url ?? '';
+
+  const isPdf = /\.pdf$/i.test(fileUrl);
+  const isImage = /\.(png|jpe?g|webp|gif)$/i.test(fileUrl);
+  const isOfficeDoc = /\.(docx|pptx|xlsx)$/i.test(fileUrl);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 pb-20">
       <div className="w-full max-w-md space-y-4">
         
-        {/* Top Report Toast Banner */}
+        {/* Toast Notification */}
         {reportSubmitted && (
           <div className="bg-emerald-500 text-white text-xs font-bold p-3 rounded-2xl flex items-center justify-between shadow-md">
             <div className="flex items-center gap-2">
@@ -122,13 +174,16 @@ export default function NoteDetailPage() {
 
         {/* Back Header */}
         <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="w-9 h-9 bg-white border rounded-full flex items-center justify-center">
+          <button 
+            onClick={() => router.push('/browse')} 
+            className="w-9 h-9 bg-white border border-slate-200 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors"
+          >
             <ArrowLeft className="w-4 h-4 text-slate-600" />
           </button>
           <h1 className="text-lg font-bold text-slate-900">Note Detail</h1>
         </div>
 
-        {/* Note Metadata */}
+        {/* Metadata */}
         <div className="space-y-1">
           <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wide">
             {note.subject}
@@ -137,20 +192,56 @@ export default function NoteDetailPage() {
             {note.title}
           </h2>
           <p className="text-xs text-slate-500">
-            By {note.uploader?.full_name || 'Student'} • {note.uploader?.course}
+            By {note.uploader?.full_name || 'Student'} • {note.uploader?.course || 'BS Computer Engineering'}
           </p>
         </div>
 
-        {/* Document In-App Preview Container */}
-        <div className="bg-slate-200/60 border border-slate-200 rounded-3xl h-64 flex flex-col items-center justify-center p-6 text-center space-y-2">
-          <FileText className="w-10 h-10 text-slate-400" />
-          <span className="text-xs font-bold text-slate-700 truncate max-w-xs">{note.title}</span>
-          <span className="text-[10px] text-slate-500">
-            {isDocumentExternal ? '* DOCX and PPTX files will download to open externally.' : 'In-App PDF / Image Preview'}
-          </span>
+        {/* Dynamic File Preview Container */}
+        <div className="bg-slate-900/5 border border-slate-200 rounded-3xl overflow-hidden min-h-[280px] flex flex-col items-center justify-center relative">
+          {isPdf ? (
+            <iframe
+              src={`${fileUrl}#toolbar=0`}
+              className="w-full h-[380px] rounded-3xl border-none"
+              title={note.title}
+            />
+          ) : isImage ? (
+            <img
+              src={fileUrl}
+              alt={note.title}
+              className="w-full h-auto max-h-[380px] object-contain rounded-3xl p-2"
+            />
+          ) : isOfficeDoc ? (
+            <div className="p-6 text-center space-y-3 flex flex-col items-center">
+              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800 block truncate max-w-xs">{note.title}</span>
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Office documents (.docx / .pptx) must be downloaded to view full contents.
+                </span>
+              </div>
+              <a
+                href={fileUrl}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition"
+              >
+                <span>Download File</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          ) : (
+            <div className="p-6 text-center space-y-2">
+              <FileText className="w-10 h-10 text-slate-400 mx-auto" />
+              <span className="text-xs font-bold text-slate-700 block truncate max-w-xs">{note.title}</span>
+              <span className="text-[10px] text-slate-500 block">Preview unavailable for this file format</span>
+            </div>
+          )}
         </div>
 
-        {/* Actions Row */}
+        {/* Action Buttons */}
         <div className="flex gap-3">
           <button
             onClick={handleUpvote}
@@ -168,19 +259,19 @@ export default function NoteDetailPage() {
           </button>
 
           <a
-            href={note.file_url ?? '#'}
+            href={fileUrl || '#'}
             download
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
+            className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-colors"
           >
             <Download className="w-4 h-4" />
             <span>Download</span>
           </a>
         </div>
 
-        {/* Collapsible Report Section */}
-        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+        {/* Report Section */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
           <button
             onClick={() => setIsReportOpen(!isReportOpen)}
             className="w-full flex items-center justify-between text-xs font-bold text-slate-600"
@@ -194,11 +285,11 @@ export default function NoteDetailPage() {
 
           {isReportOpen && (
             <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
-              <label className="text-[11px] font-semibold text-slate-500">Select reason:</label>
+              <label className="text-[11px] font-semibold text-slate-500 block">Select reason:</label>
               <select
                 value={reportReason}
                 onChange={(e) => setReportReason(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-800"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
               >
                 <option value="Wrong subject">Wrong subject tag</option>
                 <option value="Inappropriate content">Inappropriate content</option>
