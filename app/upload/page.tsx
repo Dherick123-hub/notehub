@@ -11,7 +11,8 @@ import {
   Image as ImageIcon, 
   FileCode, 
   Bookmark, 
-  AlertTriangle 
+  AlertTriangle,
+  X 
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -25,6 +26,7 @@ export default function UploadPage() {
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Digital Logic');
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
@@ -47,6 +49,41 @@ export default function UploadPage() {
       }
     });
   }, [router]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+
+    if (!selectedFile) {
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
+
+    // Check if selected file is an image
+    const isImageFile = selectedFile.type.startsWith('image/') || 
+      /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(selectedFile.name);
+
+    if (isImageFile) {
+      const url = URL.createObjectURL(selectedFile);
+      setPreviewUrl(url);
+    }
+  };
+
+  const handleRemoveFile = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    setFile(null);
+  };
 
   const checkDuplicate = async (inputTitle: string, inputSubject: string) => {
     if (!inputTitle.trim()) {
@@ -73,7 +110,7 @@ export default function UploadPage() {
     checkDuplicate(val, subject);
   };
 
-  const handleSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleSubjectChange = (e: React.ChangeEvent<SELECTElement>) => {
     const val = e.target.value;
     setSubject(val);
     checkDuplicate(title, val);
@@ -89,7 +126,6 @@ export default function UploadPage() {
     const fileExt = file.name.split('.').pop();
     const filePath = `${Date.now()}_${file.name}`;
 
-    // Upload to Storage
     const { error: uploadError } = await supabase.storage
       .from(bucketName)
       .upload(filePath, file);
@@ -100,12 +136,10 @@ export default function UploadPage() {
       return;
     }
 
-    // Get Public URL
     const { data: { publicUrl } } = supabase.storage
       .from(bucketName)
       .getPublicUrl(filePath);
 
-    // Save record with uploader_id
     const { error: dbError } = await supabase.from('notes').insert({
       title: title.trim(),
       subject: subject.trim(),
@@ -143,24 +177,61 @@ export default function UploadPage() {
         <form onSubmit={handleFormSubmit} className="space-y-5">
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-slate-600">File Attachment</label>
-            <label className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition bg-white group shadow-sm">
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.docx,.pptx"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="hidden"
-                required
-              />
-              <div className="w-12 h-12 bg-blue-50/80 rounded-2xl flex items-center justify-center text-blue-600 mb-2 group-hover:scale-105 transition-transform">
-                <ImageIcon className="w-6 h-6" />
+            
+            {!file ? (
+              <label className="border-2 border-dashed border-blue-400 bg-blue-50/20 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50/40 transition group shadow-sm min-h-[160px]">
+                <input
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.docx,.pptx"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  required
+                />
+                <div className="w-12 h-12 bg-blue-100/80 rounded-2xl flex items-center justify-center text-blue-600 mb-2 group-hover:scale-105 transition-transform">
+                  <ImageIcon className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-semibold text-blue-600">Choose Notes File</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                  PDF, JPG, PNG, DOCX, PPTX — max 25 MB
+                </p>
+              </label>
+            ) : (
+              <div className="relative border-2 border-blue-500 rounded-2xl p-3 bg-white shadow-sm flex flex-col items-center justify-center min-h-[180px] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="absolute top-2 right-2 z-10 bg-slate-900/80 hover:bg-slate-900 text-white rounded-full p-1 transition shadow"
+                  title="Remove File"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                {previewUrl ? (
+                  <div className="w-full flex flex-col items-center">
+                    <img
+                      src={previewUrl}
+                      alt="Selected preview"
+                      className="max-h-36 w-auto object-contain rounded-lg border border-slate-100 shadow-inner"
+                    />
+                    <p className="text-[11px] font-semibold text-slate-600 mt-2 truncate max-w-[240px]">
+                      {file.name}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center py-3">
+                    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white mb-2 shadow font-bold text-xs uppercase">
+                      {file.name.split('.').pop()}
+                    </div>
+                    <p className="text-xs font-semibold text-slate-800 max-w-[220px] truncate">
+                      {file.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                      {(file.size / (1024 * 1024)).toFixed(2)} MB
+                    </p>
+                  </div>
+                )}
               </div>
-              <p className="text-sm font-semibold text-blue-600">
-                {file ? file.name : 'Choose Notes File'}
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
-                PDF, JPG, PNG, DOCX, PPTX — max 25 MB
-              </p>
-            </label>
+            )}
           </div>
 
           <div className="space-y-1.5">

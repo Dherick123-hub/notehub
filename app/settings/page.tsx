@@ -1,10 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronRight, Sun, Moon, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { 
+  Sun, 
+  Moon, 
+  User, 
+  KeyRound, 
+  FileText, 
+  ShieldCheck, 
+  LogOut, 
+  ChevronRight 
+} from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,37 +22,19 @@ const supabase = createClient(
 
 export default function SettingsPage() {
   const router = useRouter();
-
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [user, setUser] = useState<{ name?: string; email?: string } | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   useEffect(() => {
-    async function loadUserData() {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-
-      if (!currentUser) {
-        router.push('/login');
-        return;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUser({
+          name: user.user_metadata?.full_name || 'Jiann Carlo Liwanag',
+          email: user.email || 'jianncarloliwanag@gmail.com',
+        });
       }
-
-      setUser(currentUser);
-
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', currentUser.id)
-        .single();
-
-      if (profileData) {
-        setProfile(profileData);
-      }
-    }
-
-    loadUserData();
-  }, [router]);
+    });
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -51,107 +42,130 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 text-slate-800">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-4 flex items-center gap-3 sticky top-0 z-10">
-        <Link
-          href="/profile"
-          className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-slate-600" />
-        </Link>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xs">
-            NH
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">Settings</h1>
-        </div>
-      </div>
-
-      <div className="max-w-md mx-auto p-4 space-y-6">
-        <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
+      <div className="w-full max-w-xl space-y-6">
+        <h1 className="text-3xl font-extrabold text-slate-900 text-center tracking-tight">
           Settings
-        </h2>
+        </h1>
 
-        {/* Appearance Setting */}
-        <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-3">
-          <h3 className="text-sm font-bold text-slate-900">Appearance</h3>
-          <div className="bg-slate-100 p-1 rounded-2xl flex items-center">
+        {/* Appearance Section */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            Appearance
+          </h2>
+          <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1">
             <button
               onClick={() => setTheme('light')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition ${
                 theme === 'light'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <Sun className="w-4 h-4" />
-              Light
+              <span>Light</span>
             </button>
             <button
               onClick={() => setTheme('dark')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition ${
                 theme === 'dark'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <Moon className="w-4 h-4" />
-              Dark
+              <span>Dark</span>
             </button>
           </div>
         </div>
 
-        {/* Account & Policies Menu Group */}
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+        {/* Account & Info List */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm divide-y divide-slate-100 overflow-hidden">
           {/* Account Info */}
-          <div className="p-4 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors">
-            <div>
-              <p className="text-sm font-bold text-slate-900">Account info</p>
-              <p className="text-xs text-slate-500">
-                {profile?.full_name || 'Student'} • {user?.email || 'student@univ.edu'}
-              </p>
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+                <User className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Account info</h3>
+                <p className="text-xs text-slate-400">
+                  {user?.name ? `${user.name} • ${user.email}` : 'Loading profile...'}
+                </p>
+              </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className="w-4 h-4 text-slate-300" />
           </div>
 
-          {/* Change Password */}
-          <div className="p-4 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors">
-            <div>
-              <p className="text-sm font-bold text-slate-900">Change Password</p>
-              <p className="text-xs text-slate-500">Update your password</p>
+          {/* Change Password Link */}
+          <Link
+            href="/settings/change-password"
+            className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
+                  Change Password
+                </h3>
+                <p className="text-xs text-slate-400">Update your password</p>
+              </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
-          </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition" />
+          </Link>
 
-          {/* Terms of Use */}
-          <div className="p-4 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors">
-            <div>
-              <p className="text-sm font-bold text-slate-900">Terms of Use</p>
-              <p className="text-xs text-slate-500">Read NoteHub terms</p>
+          {/* Terms of Use Link */}
+          <Link
+            href="/settings/term-of-use"
+            className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
+                  Terms of Use
+                </h3>
+                <p className="text-xs text-slate-400">Read NoteHub terms</p>
+              </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
-          </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition" />
+          </Link>
 
           {/* Academic Integrity Policy */}
-          <div className="p-4 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors">
-            <div>
-              <p className="text-sm font-bold text-slate-900">Academic Integrity Policy</p>
-              <p className="text-xs text-slate-500">Review sharing rules</p>
+          <div className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Academic Integrity Policy
+                </h3>
+                <p className="text-xs text-slate-400">Review sharing rules</p>
+              </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className="w-4 h-4 text-slate-300" />
           </div>
 
           {/* Log Out Button */}
           <button
             onClick={handleLogout}
-            className="w-full p-4 flex items-center justify-between hover:bg-red-50 text-left transition-colors group"
+            className="w-full p-4 flex items-center justify-between hover:bg-red-50 transition text-left group"
           >
-            <div>
-              <p className="text-sm font-bold text-red-600">Log Out</p>
-              <p className="text-xs text-slate-500">Sign out of NoteHub</p>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-500">
+                <LogOut className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-red-600">Log Out</h3>
+                <p className="text-xs text-red-400">Sign out of NoteHub</p>
+              </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-red-400 group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="w-4 h-4 text-red-300 group-hover:text-red-500 transition" />
           </button>
         </div>
       </div>
