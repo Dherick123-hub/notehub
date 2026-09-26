@@ -75,7 +75,6 @@ export default function Navbar() {
         <div>
           {user ? (
             <div className="flex items-center gap-3 md:gap-4">
-              {/* Admin Panel Link - Rendered only when user role is 'admin' */}
               {isAdmin && (
                 <Link
                   href="/admin"
@@ -86,13 +85,7 @@ export default function Navbar() {
                 </Link>
               )}
 
-              {/* Desktop links hidden on mobile layout since BottomNav handles them */}
-              <Link
-                href="/browse"
-                className="hidden md:inline-block text-sm font-medium text-gray-300 hover:text-white transition"
-              >
-                Browse
-              </Link>
+              {/* REMOVED: "Browse" link was here */}
 
               <Link
                 href="/profile"
