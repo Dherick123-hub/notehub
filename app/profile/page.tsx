@@ -4,7 +4,20 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
-import { Settings, FileText, Upload, User as UserIcon, Loader2, Grid } from 'lucide-react';
+import { 
+  Settings, 
+  FileText, 
+  Upload, 
+  User as UserIcon, 
+  Loader2, 
+  Grid, 
+  X, 
+  ArrowUp, 
+  Download, 
+  AlertTriangle, 
+  ChevronDown,
+  Camera
+} from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,12 +44,10 @@ interface NoteItem {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [userNotes, setUserNotes] = useState<NoteItem[]>([]);
   const [showAllModal, setShowAllModal] = useState<boolean>(false);
 
@@ -114,6 +125,117 @@ export default function ProfilePage() {
     };
   }, [router]);
 
+  // Handle avatar upload to Supabase Storage
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      setLoading(true);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const userId = session.user.id;
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${userId}/avatar.${fileExt}`;
+
+      // Upload image to 'avatars' storage bucket
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Retrieve public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Update public URL in profiles table
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', userId);
+
+      if (updateError) throw updateError;
+
+      setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      alert('Failed to upload avatar.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open note details and check if user upvoted
+  const handleOpenNoteModal = async (note: NoteItem) => {
+    setSelectedNote(note);
+    setHasUpvoted(false);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const { data: userVote } = await supabase
+        .from('upvotes')
+        .select('id')
+        .eq('note_id', note.id)
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (userVote) setHasUpvoted(true);
+    }
+  };
+
+  // Toggle upvote within the modal
+  const handleToggleUpvote = async () => {
+    if (!selectedNote || upvoteLoading) return;
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return alert('Please log in to upvote');
+
+    setUpvoteLoading(true);
+    const userId = session.user.id;
+    const currentVotes = selectedNote.upvotes_count || 0;
+
+    if (hasUpvoted) {
+      await supabase
+        .from('upvotes')
+        .delete()
+        .eq('note_id', selectedNote.id)
+        .eq('user_id', userId);
+
+      const updatedCount = Math.max(0, currentVotes - 1);
+      setHasUpvoted(false);
+      
+      // Update selected note state
+      setSelectedNote({ ...selectedNote, upvotes_count: updatedCount });
+      
+      // Update main notes array state
+      setUserNotes((prev) =>
+        prev.map((n) => (n.id === selectedNote.id ? { ...n, upvotes_count: updatedCount } : n))
+      );
+    } else {
+      await supabase.from('upvotes').insert({
+        note_id: selectedNote.id,
+        user_id: userId,
+      });
+
+      const updatedCount = currentVotes + 1;
+      setHasUpvoted(true);
+
+      // Update selected note state
+      setSelectedNote({ ...selectedNote, upvotes_count: updatedCount });
+
+      // Update main notes array state
+      setUserNotes((prev) =>
+        prev.map((n) => (n.id === selectedNote.id ? { ...n, upvotes_count: updatedCount } : n))
+      );
+    }
+
+    setUpvoteLoading(false);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
@@ -124,15 +246,6 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-28 pt-10 px-4 flex flex-col items-center">
-      {/* Hidden File Input for Avatar Selection */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleAvatarUpload}
-        accept="image/*"
-        className="hidden"
-      />
-
       <div className="w-full max-w-xl">
         {/* TOP BRANDING BAR */}
         <div className="flex items-center justify-between mb-8">
@@ -160,48 +273,29 @@ export default function ProfilePage() {
         {/* PROFILE CARD */}
         <div className="bg-white rounded-3xl p-6 mb-5 border border-slate-100 shadow-sm">
           <div className="flex items-center space-x-4">
-            
-            {/* Clickable & Viewable Avatar Container */}
-            <div className="relative group shrink-0">
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer relative border-2 border-slate-200 group-hover:border-blue-500 transition-colors shadow-inner"
-                title="Click to change profile image"
-              >
-                {uploading ? (
-                  <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
-                ) : profile?.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt={profile.full_name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <UserIcon className="w-9 h-9 text-slate-400" />
-                )}
-
-                {/* Hover overlay with Camera icon */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity rounded-full">
-                  <Camera className="w-5 h-5" />
-                  <span className="text-[9px] font-bold mt-0.5">Change</span>
-                </div>
-              </div>
-
-              {/* View full-size image toggle button */}
-              {profile?.avatar_url && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsViewerOpen(true);
-                  }}
-                  className="absolute -bottom-1 -right-1 p-1.5 bg-white text-slate-600 hover:text-blue-600 rounded-full border border-slate-200 shadow-md transition-transform hover:scale-110"
-                  title="View full avatar"
-                >
-                  <Maximize2 className="w-3 h-3" />
-                </button>
+            {/* AVATAR WITH CLICKABLE OVERLAY */}
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="relative w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden cursor-pointer group"
+            >
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt={profile.full_name} className="w-full h-full object-cover" />
+              ) : (
+                <UserIcon className="w-9 h-9 text-slate-400" />
               )}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="w-5 h-5 text-white" />
+              </div>
             </div>
+
+            {/* HIDDEN FILE INPUT */}
+            <input 
+              type="file"
+              ref={fileInputRef}
+              onChange={handleAvatarUpload}
+              accept="image/*"
+              className="hidden"
+            />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2">
@@ -300,7 +394,122 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Bottom Nav Bar - Always points strictly to base routes */}
+      {/* VIEW ALL UPLOADS MODAL */}
+      {showAllModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4 relative max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h2 className="text-xl font-extrabold text-[#0F172A]">All My Uploads</h2>
+              <button
+                onClick={() => setShowAllModal(false)}
+                className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-3 pr-1 flex-1">
+              {userNotes.map((note) => (
+                <div
+                  key={note.id}
+                  onClick={() => handleOpenNoteModal(note)}
+                  className="bg-[#F8FAFC] rounded-2xl p-4 border border-slate-200 hover:border-blue-400 transition cursor-pointer"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-sm font-bold text-[#0F172A] leading-snug">
+                      {note.title}
+                    </h3>
+                    <span className="flex items-center gap-1 text-xs font-bold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-full">
+                      <ArrowUp className="w-3 h-3 text-[#2563EB]" />
+                      {note.upvotes_count || 0}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
+                    <span className="text-[#0D9488] bg-[#CCFBF1] px-2.5 py-0.5 rounded-md font-bold">
+                      {note.subject || 'General'}
+                    </span>
+                    <span>{new Date(note.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTE PREVIEW / DETAIL MODAL */}
+      {selectedNote && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[32px] p-6 shadow-2xl relative space-y-5">
+            {/* CLOSE BUTTON */}
+            <button
+              onClick={() => setSelectedNote(null)}
+              className="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* HEADER */}
+            <div>
+              <span className="text-xs font-black text-[#2563EB] uppercase tracking-wider">
+                {selectedNote.subject || 'GENERAL'}
+              </span>
+              <h1 className="text-2xl font-black text-[#0F172A] mt-0.5">{selectedNote.title}</h1>
+              <p className="text-xs font-semibold text-slate-400 mt-1">
+                By {profile?.full_name || 'Student'} • {profile?.course || 'BS Computer Engineering'}
+              </p>
+            </div>
+
+            {/* FILE PREVIEW */}
+            <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center min-h-[260px] max-h-[380px]">
+              {selectedNote.file_url ? (
+                <img src={selectedNote.file_url} alt={selectedNote.title} className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-xs font-semibold text-slate-400">Preview not available</span>
+              )}
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={handleToggleUpvote}
+                disabled={upvoteLoading}
+                className={`flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-sm transition ${
+                  hasUpvoted ? 'bg-blue-800 text-white' : 'bg-[#2563EB] hover:bg-blue-600 text-white'
+                }`}
+              >
+                <ArrowUp className="w-4 h-4" />
+                Upvote • {selectedNote.upvotes_count || 0}
+              </button>
+
+              <a
+                href={selectedNote.file_url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`flex items-center justify-center gap-2 bg-[#2563EB] hover:bg-blue-600 text-white py-3 rounded-2xl font-black text-sm transition ${
+                  !selectedNote.file_url ? 'pointer-events-none opacity-50' : ''
+                }`}
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </a>
+            </div>
+
+            {/* REPORT SECTION */}
+            <div className="border border-slate-100 rounded-2xl p-3.5 flex items-center justify-between text-xs font-bold text-slate-500 bg-slate-50/50 cursor-pointer">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-slate-400" />
+                <span>Report Issue</span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM NAV BAR */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-8 py-3 flex justify-center items-center z-20">
         <div className="w-full max-w-xl flex justify-around items-center">
           <Link href="/browse" className="flex flex-col items-center text-slate-400 hover:text-slate-600">
