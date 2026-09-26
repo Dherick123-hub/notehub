@@ -12,7 +12,8 @@ import {
   FileText, 
   ShieldCheck, 
   LogOut, 
-  ChevronRight 
+  ChevronRight,
+  ArrowLeft 
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -44,12 +45,26 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
       <div className="w-full max-w-xl space-y-6">
-        <h1 className="text-3xl font-extrabold text-slate-900 text-center tracking-tight">
-          Settings
-        </h1>
+        
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between">
+          <Link
+            href="/profile"
+            className="p-2.5 rounded-2xl bg-white border border-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-100 shadow-xs transition"
+            title="Back to Profile"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight pr-7">
+            Settings
+          </h1>
+          
+          <div className="w-9" />
+        </div>
 
         {/* Appearance Section */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Appearance
           </h2>
@@ -58,7 +73,7 @@ export default function SettingsPage() {
               onClick={() => setTheme('light')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition ${
                 theme === 'light'
-                  ? 'bg-white text-slate-900 shadow-sm'
+                  ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
@@ -69,7 +84,7 @@ export default function SettingsPage() {
               onClick={() => setTheme('dark')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition ${
                 theme === 'dark'
-                  ? 'bg-blue-600 text-white shadow-sm'
+                  ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
@@ -80,22 +95,28 @@ export default function SettingsPage() {
         </div>
 
         {/* Account & Info List */}
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm divide-y divide-slate-100 overflow-hidden">
-          {/* Account Info */}
-          <div className="p-4 flex items-center justify-between">
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
+          
+          {/* Account Info Link (Navigates to separate page) */}
+          <Link
+            href="/settings/account-info"
+            className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer group"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition">
                 <User className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">Account info</h3>
+                <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
+                  Account info
+                </h3>
                 <p className="text-xs text-slate-400">
-                  {user?.name ? `${user.name} • ${user.email}` : 'Loading profile...'}
+                  {user?.name ? `${user.name} • ${user.email}` : 'Jiann Carlo Liwanag • jianncarloliwanag@gmail.com'}
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-300" />
-          </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition" />
+          </Link>
 
           {/* Change Password Link */}
           <Link
@@ -168,6 +189,7 @@ export default function SettingsPage() {
             <ChevronRight className="w-4 h-4 text-red-300 group-hover:text-red-500 transition" />
           </button>
         </div>
+
       </div>
     </div>
   );

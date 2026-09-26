@@ -1,10 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
-import { Settings, FileText, Upload, User as UserIcon, Loader2, Grid } from 'lucide-react';
+import { 
+  Settings, 
+  FileText, 
+  Upload, 
+  User as UserIcon, 
+  Loader2, 
+  Grid, 
+  Camera, 
+  Maximize2, 
+  X 
+} from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,8 +40,12 @@ interface NoteItem {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [userNotes, setUserNotes] = useState<NoteItem[]>([]);
 
   useEffect(() => {
@@ -103,6 +117,48 @@ export default function ProfilePage() {
     };
   }, [router]);
 
+  // Handle uploading avatar image to Supabase Storage
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true);
+
+      if (!e.target.files || e.target.files.length === 0 || !profile?.id) {
+        return;
+      }
+
+      const file = e.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${profile.id}-${Math.random()}.${fileExt}`;
+
+      // 1. Upload file to Supabase 'avatars' storage bucket
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // 2. Obtain Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // 3. Update profiles table in Supabase database
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      // Update state dynamically
+      setProfile((prev) => prev ? { ...prev, avatar_url: publicUrl } : null);
+    } catch (err: any) {
+      alert(err.message || 'Error uploading profile image.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
@@ -113,6 +169,15 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-28 pt-10 px-4 flex flex-col items-center">
+      {/* Hidden File Input for Avatar Selection */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleAvatarUpload}
+        accept="image/*"
+        className="hidden"
+      />
+
       <div className="w-full max-w-xl">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-3">
@@ -138,11 +203,46 @@ export default function ProfilePage() {
 
         <div className="bg-white rounded-3xl p-6 mb-5 border border-slate-100 shadow-sm">
           <div className="flex items-center space-x-4">
-            <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
-              {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt={profile.full_name} className="w-full h-full object-cover" />
-              ) : (
-                <UserIcon className="w-9 h-9 text-slate-400" />
+            
+            {/* Clickable & Viewable Avatar Container */}
+            <div className="relative group shrink-0">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer relative border-2 border-slate-200 group-hover:border-blue-500 transition-colors shadow-inner"
+                title="Click to change profile image"
+              >
+                {uploading ? (
+                  <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+                ) : profile?.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.full_name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <UserIcon className="w-9 h-9 text-slate-400" />
+                )}
+
+                {/* Hover overlay with Camera icon */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity rounded-full">
+                  <Camera className="w-5 h-5" />
+                  <span className="text-[9px] font-bold mt-0.5">Change</span>
+                </div>
+              </div>
+
+              {/* View full-size image toggle button */}
+              {profile?.avatar_url && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsViewerOpen(true);
+                  }}
+                  className="absolute -bottom-1 -right-1 p-1.5 bg-white text-slate-600 hover:text-blue-600 rounded-full border border-slate-200 shadow-md transition-transform hover:scale-110"
+                  title="View full avatar"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                </button>
               )}
             </div>
 
@@ -236,7 +336,42 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Bottom Nav Bar - Always points strictly to base routes */}
+      {/* Lightbox / Fullscreen Modal Viewer */}
+      {isViewerOpen && profile?.avatar_url && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative max-w-sm w-full bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center p-6">
+            <button
+              onClick={() => setIsViewerOpen(false)}
+              className="absolute top-4 right-4 p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h4 className="text-sm font-bold text-slate-300 mb-4">{profile.full_name}</h4>
+
+            <div className="w-64 h-64 rounded-2xl overflow-hidden border-2 border-slate-800 shadow-lg mb-6">
+              <img
+                src={profile.avatar_url}
+                alt={profile.full_name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                setIsViewerOpen(false);
+                fileInputRef.current?.click();
+              }}
+              className="py-2.5 px-6 rounded-2xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 transition-colors"
+            >
+              <Camera className="w-4 h-4" />
+              Upload New Picture
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Nav Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-8 py-3 flex justify-center items-center z-20">
         <div className="w-full max-w-xl flex justify-around items-center">
           <Link href="/browse" className="flex flex-col items-center text-slate-400 hover:text-slate-600">
