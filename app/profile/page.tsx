@@ -4,17 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
-import { 
-  Settings, 
-  FileText, 
-  Upload, 
-  User as UserIcon, 
-  Loader2, 
-  Grid, 
-  Camera, 
-  Maximize2, 
-  X 
-} from 'lucide-react';
+import { Settings, FileText, Upload, User as UserIcon, Loader2, Grid } from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +24,7 @@ interface NoteItem {
   id: string;
   title: string;
   subject: string;
+  file_url?: string;
   created_at: string;
   upvotes_count?: number;
 }
@@ -47,6 +38,12 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [userNotes, setUserNotes] = useState<NoteItem[]>([]);
+  const [showAllModal, setShowAllModal] = useState<boolean>(false);
+
+  // States for Note Detail Modal and Upvote handling
+  const [selectedNote, setSelectedNote] = useState<NoteItem | null>(null);
+  const [hasUpvoted, setHasUpvoted] = useState<boolean>(false);
+  const [upvoteLoading, setUpvoteLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -76,10 +73,10 @@ export default function ProfilePage() {
           setProfile(profileData);
         }
 
-        // Query using uploader_id to match Upload page inserts
+        // Fetch notes including file_url for previewing
         const { data: notesData, error: notesError } = await supabase
           .from('notes')
-          .select('id, title, subject, created_at')
+          .select('id, title, subject, file_url, created_at')
           .eq('uploader_id', userId)
           .order('created_at', { ascending: false });
 
@@ -117,52 +114,10 @@ export default function ProfilePage() {
     };
   }, [router]);
 
-  // Handle uploading avatar image to Supabase Storage
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      setUploading(true);
-
-      if (!e.target.files || e.target.files.length === 0 || !profile?.id) {
-        return;
-      }
-
-      const file = e.target.files[0];
-      const fileExt = file.name.split('.').pop();
-      const filePath = `${profile.id}-${Math.random()}.${fileExt}`;
-
-      // 1. Upload file to Supabase 'avatars' storage bucket
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      // 2. Obtain Public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      // 3. Update profiles table in Supabase database
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', profile.id);
-
-      if (updateError) throw updateError;
-
-      // Update state dynamically
-      setProfile((prev) => prev ? { ...prev, avatar_url: publicUrl } : null);
-    } catch (err: any) {
-      alert(err.message || 'Error uploading profile image.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+        <Loader2 className="w-8 h-8 text-[#2563EB] animate-spin" />
       </div>
     );
   }
@@ -179,6 +134,7 @@ export default function ProfilePage() {
       />
 
       <div className="w-full max-w-xl">
+        {/* TOP BRANDING BAR */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-[#2563EB] rounded-2xl flex items-center justify-center text-white shadow-sm">
@@ -201,6 +157,7 @@ export default function ProfilePage() {
 
         <h1 className="text-3xl font-extrabold text-[#0F172A] mb-6 tracking-tight">Student Profile</h1>
 
+        {/* PROFILE CARD */}
         <div className="bg-white rounded-3xl p-6 mb-5 border border-slate-100 shadow-sm">
           <div className="flex items-center space-x-4">
             
@@ -278,7 +235,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Dynamic Stats Calculation */}
+        {/* STATS CARDS */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
             <span className="text-xs font-bold text-slate-400 block mb-2">Notes Shared</span>
@@ -292,20 +249,27 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* MY UPLOADS HEADER */}
         <div className="flex items-center justify-between mb-4 px-1">
           <h2 className="text-xl font-extrabold text-[#0F172A] tracking-tight">My Uploads</h2>
-          <Link href="/browse" className="text-xs font-bold text-[#2563EB] hover:underline">
-            View All
-          </Link>
+          {userNotes.length > 0 && (
+            <button 
+              onClick={() => setShowAllModal(true)} 
+              className="text-xs font-bold text-[#2563EB] hover:underline cursor-pointer"
+            >
+              View All
+            </button>
+          )}
         </div>
 
+        {/* MY UPLOADS PREVIEW LIST (Displays up to 3 items) */}
         <div className="space-y-3 mb-4">
           {userNotes.length > 0 ? (
-            userNotes.map((note) => (
-              <Link 
+            userNotes.slice(0, 3).map((note) => (
+              <div
                 key={note.id} 
-                href={`/browse/${note.id}`}
-                className="block bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4 hover:border-blue-300 transition-colors cursor-pointer"
+                onClick={() => handleOpenNoteModal(note)}
+                className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4 hover:border-blue-300 transition-colors cursor-pointer"
               >
                 <h4 className="text-lg font-bold text-[#0F172A]">{note.title}</h4>
                 <div className="flex items-center justify-between">
@@ -326,7 +290,7 @@ export default function ProfilePage() {
                     {note.upvotes_count || 0}
                   </span>
                 </div>
-              </Link>
+              </div>
             ))
           ) : (
             <div className="bg-white rounded-3xl p-6 border border-slate-100 text-center text-slate-400 text-sm font-medium">
@@ -336,42 +300,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Lightbox / Fullscreen Modal Viewer */}
-      {isViewerOpen && profile?.avatar_url && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative max-w-sm w-full bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center p-6">
-            <button
-              onClick={() => setIsViewerOpen(false)}
-              className="absolute top-4 right-4 p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-full transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <h4 className="text-sm font-bold text-slate-300 mb-4">{profile.full_name}</h4>
-
-            <div className="w-64 h-64 rounded-2xl overflow-hidden border-2 border-slate-800 shadow-lg mb-6">
-              <img
-                src={profile.avatar_url}
-                alt={profile.full_name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            <button
-              onClick={() => {
-                setIsViewerOpen(false);
-                fileInputRef.current?.click();
-              }}
-              className="py-2.5 px-6 rounded-2xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 transition-colors"
-            >
-              <Camera className="w-4 h-4" />
-              Upload New Picture
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom Nav Bar */}
+      {/* Bottom Nav Bar - Always points strictly to base routes */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-8 py-3 flex justify-center items-center z-20">
         <div className="w-full max-w-xl flex justify-around items-center">
           <Link href="/browse" className="flex flex-col items-center text-slate-400 hover:text-slate-600">
