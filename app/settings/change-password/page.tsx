@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -16,14 +16,19 @@ export default function ChangePasswordPage() {
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
-  // Independent eye-toggle states for each field
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Protect route: ensure user is authenticated
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        router.push('/login');
+      }
+    });
+  }, [router]);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +64,7 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-slate-100 shadow-xs space-y-6">
+      <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-slate-100 shadow-sm space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <Link
@@ -93,7 +98,6 @@ export default function ChangePasswordPage() {
               </div>
             )}
 
-            {/* New Password Field */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-slate-600">
                 New Password
@@ -101,24 +105,23 @@ export default function ChangePasswordPage() {
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type={showNewPassword ? 'text' : 'password'}
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="At least 6 characters"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full text-sm pl-10 pr-10 py-3 border border-slate-200/80 rounded-2xl text-slate-900 bg-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
+                  className="w-full text-sm pl-10 pr-10 py-3 border border-slate-200/80 rounded-2xl text-slate-900 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                   required
                 />
                 <button
                   type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition focus:outline-hidden"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
-                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            {/* Confirm New Password Field */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-slate-600">
                 Confirm New Password
@@ -126,27 +129,20 @@ export default function ChangePasswordPage() {
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type={showConfirmPassword ? 'text' : 'password'}
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="Re-enter new password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full text-sm pl-10 pr-10 py-3 border border-slate-200/80 rounded-2xl text-slate-900 bg-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
+                  className="w-full text-sm pl-10 pr-10 py-3 border border-slate-200/80 rounded-2xl text-slate-900 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition focus:outline-hidden"
-                >
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-2xl transition text-sm shadow-xs disabled:opacity-50 mt-2 cursor-pointer"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-2xl transition text-sm shadow-sm disabled:opacity-50 mt-2"
             >
               {isLoading ? 'Updating Password...' : 'Update Password'}
             </button>

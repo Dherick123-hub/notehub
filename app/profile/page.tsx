@@ -47,7 +47,7 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [userNotes, setUserNotes] = useState<NoteItem[]>([]);
   const [showAllModal, setShowAllModal] = useState<boolean>(false);
 

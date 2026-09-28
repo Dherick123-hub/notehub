@@ -32,11 +32,18 @@ interface Note {
   file_url: string;
   created_at: string;
   uploader_id: string;
-  profiles?: {
-    full_name: string | null;
-    course: string | null;
-    year_level: string | null;
-  } | null;
+  profiles?:
+    | {
+        full_name: string | null;
+        course: string | null;
+        year_level: string | null;
+      }
+    | Array<{
+        full_name: string | null;
+        course: string | null;
+        year_level: string | null;
+      }>
+    | null;
   upvotes_count?: number;
   user_has_upvoted?: boolean;
 }
@@ -239,7 +246,8 @@ export default function BrowsePage() {
 
   const filteredNotes = notes.filter((note) => {
     const query = searchQuery.toLowerCase().trim();
-    const uploaderName = note.profiles?.full_name?.toLowerCase() || '';
+    const profile = Array.isArray(note.profiles) ? note.profiles[0] : note.profiles;
+    const uploaderName = profile?.full_name?.toLowerCase() || '';
     return (
       note.title.toLowerCase().includes(query) ||
       note.subject.toLowerCase().includes(query) ||
@@ -319,9 +327,10 @@ export default function BrowsePage() {
         ) : filteredNotes.length > 0 ? (
           <div className="space-y-4">
             {filteredNotes.map((note) => {
-              const uploaderName = note.profiles?.full_name || 'juan';
-              const courseYear = note.profiles?.course
-                ? `${note.profiles.course} ${note.profiles.year_level || ''}`
+              const profile = Array.isArray(note.profiles) ? note.profiles[0] : note.profiles;
+              const uploaderName = profile?.full_name || 'juan';
+              const courseYear = profile?.course
+                ? `${profile.course} ${profile.year_level || ''}`
                 : 'CpE 3';
 
               return (
@@ -391,11 +400,17 @@ export default function BrowsePage() {
               <h2 className="text-2xl font-extrabold text-slate-900 leading-tight">
                 {selectedNote.title}
               </h2>
-              <p className="text-xs font-medium text-slate-400">
-                By {selectedNote.profiles?.full_name || 'juan'}{' '}
-                {selectedNote.profiles?.course &&
-                  `• ${selectedNote.profiles.course}`}
-              </p>
+              {(() => {
+                const profile = Array.isArray(selectedNote.profiles)
+                  ? selectedNote.profiles[0]
+                  : selectedNote.profiles;
+                return (
+                  <p className="text-xs font-medium text-slate-400">
+                    By {profile?.full_name || 'juan'}{' '}
+                    {profile?.course && `• ${profile.course}`}
+                  </p>
+                );
+              })()}
             </div>
 
             <div className="w-full bg-slate-100 rounded-2xl overflow-hidden border border-slate-200/80 max-h-80 flex items-center justify-center">
