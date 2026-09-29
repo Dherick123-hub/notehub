@@ -180,21 +180,24 @@ export default function SettingsPage() {
             <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition" />
           </Link>
 
-          {/* Academic Integrity Policy */}
-          <div className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer">
+          {/* Academic Integrity Policy Link */}
+          <Link
+            href="/settings/academic-integrity"
+            className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer group"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
                   Academic Integrity Policy
                 </h3>
                 <p className="text-xs text-slate-400">Review sharing rules</p>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-300" />
-          </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition" />
+          </Link>
 
           {/* STEP 2 UI: Admin Portal Link rendered conditionally */}
           {isAdmin && (
@@ -220,7 +223,7 @@ export default function SettingsPage() {
           {/* Log Out Button */}
           <button
             onClick={handleLogout}
-            className="w-full p-4 flex items-center justify-between hover:bg-red-50 transition text-left group"
+            className="w-full p-4 flex items-center justify-between hover:bg-red-50 transition text-left group cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-500">

@@ -1,75 +1,64 @@
-'use client';
-
 import Link from 'next/link';
-import { ArrowLeft, ShieldCheck, FileCheck, AlertTriangle, BookOpen } from 'lucide-react';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
 export default function AcademicIntegrityPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
       <div className="w-full max-w-2xl space-y-6">
-        {/* Back Link */}
-        <Link 
-          href="/settings" 
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-900 transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Settings
-        </Link>
-
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Academic Integrity Policy
-            </h1>
-            <p className="text-xs text-slate-400">
-              Guidelines for ethical note-sharing and collaboration on NoteHub
-            </p>
-          </div>
+        
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between">
+          <Link
+            href="/settings"
+            className="p-2.5 rounded-2xl bg-white border border-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-100 shadow-xs transition"
+            title="Back to Settings"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight pr-7">
+            Academic Integrity Policy
+          </h1>
+          
+          <div className="w-9" />
         </div>
 
-        {/* Policy Content Card */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-6 text-slate-700 text-sm">
-          
-          <section className="space-y-2">
-            <div className="flex items-center gap-2 font-bold text-slate-900">
-              <BookOpen className="w-4 h-4 text-blue-600" />
-              <h2>1. Intended Purpose</h2>
+        {/* Content Card */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-xs space-y-6 text-slate-700 text-sm leading-relaxed">
+          <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+              <ShieldCheck className="w-6 h-6" />
             </div>
-            <p className="text-xs leading-relaxed text-slate-600 pl-6">
-              NoteHub is designed to foster collaborative learning through lecture notes, study guides, and original learning materials. Shared resources should supplement individual studying, not replace original work or breach institutional honor codes.
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">NoteHub Guidelines</h2>
+              <p className="text-xs text-slate-400">Last updated: September 2026</p>
+            </div>
+          </div>
+
+          <section className="space-y-2">
+            <h3 className="font-semibold text-slate-900 text-base">1. Academic Honesty</h3>
+            <p>
+              NoteHub is designed to promote group study and peer learning. Users are expected to maintain high standards of academic integrity and comply with their respective institution&apos;s honor codes.
             </p>
           </section>
 
           <section className="space-y-2">
-            <div className="flex items-center gap-2 font-bold text-slate-900">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <h2>2. Prohibited Content</h2>
-            </div>
-            <p className="text-xs leading-relaxed text-slate-600 pl-6">
-              Users are strictly prohibited from uploading or sharing:
-            </p>
-            <ul className="list-disc list-inside text-xs text-slate-600 pl-6 space-y-1">
-              <li>Active exam questions, test banks, or quiz answers.</li>
-              <li>Graded assignments, lab reports, or essays intended for individual submission.</li>
-              <li>Materials explicitly protected by instructor copyright or non-disclosure requests.</li>
+            <h3 className="font-semibold text-slate-900 text-base">2. Shared Content Standards</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Upload only your original study notes, summaries, or flashcards.</li>
+              <li>Do not upload active exam questions, graded tests, or answer keys.</li>
+              <li>Respect copyright laws regarding textbooks and course materials.</li>
             </ul>
           </section>
 
           <section className="space-y-2">
-            <div className="flex items-center gap-2 font-bold text-slate-900">
-              <FileCheck className="w-4 h-4 text-emerald-600" />
-              <h2>3. Student Responsibility</h2>
-            </div>
-            <p className="text-xs leading-relaxed text-slate-600 pl-6">
-              You are individually responsible for verifying that sharing or accessing materials on NoteHub complies with your institution’s academic integrity policies.
+            <h3 className="font-semibold text-slate-900 text-base">3. Violations</h3>
+            <p>
+              Any shared content found to encourage cheating or copyright infringement will be removed immediately. Repeated violations may result in account termination.
             </p>
           </section>
-
         </div>
+
       </div>
     </div>
   );
