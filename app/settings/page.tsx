@@ -13,7 +13,8 @@ import {
   ShieldCheck, 
   LogOut, 
   ChevronRight,
-  ArrowLeft 
+  ArrowLeft,
+  Shield
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -21,20 +22,43 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Replace with authorized email or check `role` field from Supabase
+const ALLOWED_ADMIN_EMAIL = 'admin@example.com';
+
 export default function SettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<{ name?: string; email?: string } | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
+  // STEP 2: Dynamically check current logged-in user and verify admin role/permission
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    const fetchUserDataAndPermissions = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
       if (user) {
         setUser({
           name: user.user_metadata?.full_name || 'Jiann Carlo Liwanag',
           email: user.email || 'jianncarloliwanag@gmail.com',
         });
+
+        // Option A: Check email match
+        const isAllowedByEmail = user.email?.toLowerCase() === ALLOWED_ADMIN_EMAIL.toLowerCase();
+
+        // Option B: Fetch role field from profiles table in Supabase
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        const isAllowedByRole = profile?.role === 'admin';
+
+        setIsAdmin(isAllowedByEmail || isAllowedByRole);
       }
-    });
+    };
+
+    fetchUserDataAndPermissions();
   }, []);
 
   const handleLogout = async () => {
@@ -97,7 +121,7 @@ export default function SettingsPage() {
         {/* Account & Info List */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
           
-          {/* Account Info Link (Navigates to separate page) */}
+          {/* Account Info Link */}
           <Link
             href="/settings/account-info"
             className="p-4 flex items-center justify-between hover:bg-slate-50 transition cursor-pointer group"
@@ -171,6 +195,27 @@ export default function SettingsPage() {
             </div>
             <ChevronRight className="w-4 h-4 text-slate-300" />
           </div>
+
+          {/* STEP 2 UI: Admin Portal Link rendered conditionally */}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="p-4 flex items-center justify-between hover:bg-emerald-50/60 transition cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#E6F4EA] flex items-center justify-center text-[#1E7245] transition">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[#1E7245]">
+                    Admin Portal
+                  </h3>
+                  <p className="text-xs text-slate-400">Manage user queue and moderation</p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#1E7245] group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          )}
 
           {/* Log Out Button */}
           <button

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
-import { Upload, CheckCircle2, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Upload, CheckCircle2, Loader2 } from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +20,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [course, setCourse] = useState('BS Computer Engineering');
   const [yearLevel, setYearLevel] = useState('3rd');
-  
+
   // File state & preview
   const [idFile, setIdFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -28,6 +28,7 @@ export default function RegisterPage() {
   // Status & loading
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +92,7 @@ export default function RegisterPage() {
         .from('student-ids')
         .getPublicUrl(filePath);
 
-      // 3. Upsert Profile record (prevents conflict with handle_new_user trigger)
+      // 3. Upsert Profile record with status = 'Pending'
       const { error: profileError } = await supabase.from('profiles').upsert(
         {
           id: user.id,
@@ -107,8 +108,19 @@ export default function RegisterPage() {
 
       if (profileError) throw profileError;
 
-      // Redirect to the pending approval status page
-      router.push('/pending-approval');
+      // 4. Terminate session & purge client auth cache so pending user cannot access protected pages
+      await supabase.auth.signOut();
+
+      if (typeof window !== 'undefined') {
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('sb-')) {
+            localStorage.removeItem(key);
+          }
+        }
+      }
+
+      // 5. Open Pop-up Modal instead of immediate redirect
+      setShowSuccessModal(true);
     } catch (err: any) {
       // Print detailed logs to Developer Console (F12)
       console.error('Detailed Registration Error:', err);
@@ -126,8 +138,13 @@ export default function RegisterPage() {
     }
   };
 
+  const handleCloseModal = () => {
+    setShowSuccessModal(false);
+    router.push('/login');
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center py-12 px-4">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center py-12 px-4 relative">
       {/* Top Header */}
       <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-10">
         <span className="text-xl font-bold text-blue-600">NoteHub</span>
@@ -298,6 +315,35 @@ export default function RegisterPage() {
           </button>
         </form>
       </div>
+
+      {/* SUCCESS MODAL POP-UP */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl text-center space-y-6">
+            <div className="flex justify-center">
+              <div className="rounded-full bg-blue-50 p-3">
+                <CheckCircle2 className="w-20 h-20 text-blue-600 stroke-[1.75]" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-2xl font-bold text-slate-900 tracking-tight">
+                Registration successful!
+              </h3>
+              <p className="text-slate-500 text-sm font-medium">
+                Wait for Admin Approval
+              </p>
+            </div>
+
+            <button
+              onClick={handleCloseModal}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-full transition shadow-md shadow-blue-500/25 text-base active:scale-95"
+            >
+              Ok
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
